@@ -37,8 +37,101 @@ public class MapGenerator : MonoBehaviour {
             SmoothMap();
         }
 
+        ProcessMap();
+
+        int border_size = 5;
+        int[,] bordered_map = new int[width + border_size * 2, height + border_size * 2];
+
+        for (int i = 0; i < bordered_map.GetLength(0); ++i){
+            for (int j = 0; j < bordered_map.GetLength(1); ++j){
+                if (i >= border_size && i < width + border_size && j >= border_size && j < height + border_size){
+                    bordered_map[i, j] = map[i - border_size, j - border_size];
+                }else{
+                    bordered_map[i, j] = 1;
+                }
+            }
+        }
+
         MeshGenerator meshGen = GetComponent<MeshGenerator>();
-        meshGen.GenerateMesh(map, 1);
+        meshGen.GenerateMesh(bordered_map, 1);
+    }
+
+    void ProcessMap(){
+        List<List<Coord>> wall_regions = GetRegions(1);
+
+        int wall_threshold_size = 50;
+        foreach (List<Coord> wall_region in wall_regions){
+            if (wall_region.Count < wall_threshold_size){
+                foreach (Coord tile in wall_region){
+                    map[tile.tileX, tile.tileY] = 0;
+                }
+            }
+        }
+
+        List<List<Coord>> room_regions = GetRegions(0);
+
+        int room_threshold_size = 50;
+        foreach (List<Coord> room_region in room_regions)
+        {
+            if (room_region.Count < room_threshold_size)
+            {
+                foreach (Coord tile in room_region)
+                {
+                    map[tile.tileX, tile.tileY] = 1;
+                }
+            }
+        }
+    }
+
+    List<List<Coord>> GetRegions(int tile_type){
+        List<List<Coord>> regions = new List<List<Coord>>();
+        int[,] map_flags = new int[width, height];
+
+        for (int x = 0; x < width; ++x){
+            for (int y = 0; y < height; ++y){
+                if (map_flags[x, y] == 0 && map[x, y] == tile_type){
+                    List<Coord> new_region = GetRegionTiles(x, y);
+                    regions.Add(new_region);
+
+                    foreach (Coord tile in new_region){
+                        map_flags[tile.tileX, tile.tileY] = 1;
+                    }
+                }
+            }
+        }
+
+        return regions;
+    }
+
+    List<Coord> GetRegionTiles (int startX, int startY){
+        List<Coord> tiles = new List<Coord>();
+        int[,] map_flags = new int[width, height];
+        int tile_type = map[startX, startY];
+
+        Queue<Coord> queue = new Queue<Coord>();
+        queue.Enqueue(new Coord(startX, startY));
+        map_flags[startX, startY] = 1;
+        while (queue.Count > 0){
+            Coord tile = queue.Dequeue();
+            tiles.Add(tile);
+
+            for (int x = tile.tileX - 1; x <= tile.tileX + 1; ++x){
+                for (int y = tile.tileY - 1; y <= tile.tileY + 1; ++y){
+                    if (IsInMapRange(x, y) && (y == tile.tileY || x == tile.tileX )){
+                        if (map_flags[x, y] == 0 && map[x, y] == tile_type){
+                            map_flags[x, y] = 1;
+                            queue.Enqueue(new Coord(x, y));
+                        }
+                    }
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    bool IsInMapRange(int x, int y){
+        return x >= 0 && x < width && y >= 0 && y < height;
     }
 
     void RandomFillMap() {
@@ -77,15 +170,24 @@ public class MapGenerator : MonoBehaviour {
         int wall_count = 0;
         for (int neighborX = gridX - 1; neighborX <= gridX + 1; ++neighborX) {
             for (int neighborY = gridY - 1; neighborY <= gridY + 1; ++neighborY) {
-                if (neighborX < 0 || neighborX >= width || neighborY < 0 || neighborY >= height) {
-                    ++wall_count;
-                } else {
-                    if (neighborX == gridX && neighborY == gridY) continue;
-                    wall_count += map[neighborX, neighborY];
+                if (IsInMapRange(neighborX, neighborY)){
+                    if (neighborX != gridX || neighborY != gridY){
+                        wall_count += map[neighborX, neighborY];
+                    }
                 }
             }
         }
         return wall_count;
+    }
+
+    struct Coord {
+        public int tileX;
+        public int tileY;
+
+        public Coord(int x, int y){
+            tileX = x;
+            tileY = y;
+        }
     }
 
     //private void OnDrawGizmos() {
