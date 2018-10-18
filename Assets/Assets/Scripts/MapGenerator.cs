@@ -71,16 +71,71 @@ public class MapGenerator : MonoBehaviour {
         List<List<Coord>> room_regions = GetRegions(0);
 
         int room_threshold_size = 50;
-        foreach (List<Coord> room_region in room_regions)
-        {
-            if (room_region.Count < room_threshold_size)
-            {
-                foreach (Coord tile in room_region)
-                {
+        List<Room> surviving_rooms = new List<Room>();
+
+        foreach (List<Coord> room_region in room_regions) {
+            if (room_region.Count < room_threshold_size) {
+                foreach (Coord tile in room_region) {
                     map[tile.tileX, tile.tileY] = 1;
+                }
+            } else {
+                surviving_rooms.Add(new Room(room_region, map));
+            }
+        }
+
+        ConnectClosestRooms(surviving_rooms);
+    }
+
+    void ConnectClosestRooms(List<Room> all_rooms) {
+
+        int best_dist = 0;
+        Coord best_tileA = new Coord();
+        Coord best_tileB = new Coord();
+        Room best_roomA = new Room();
+        Room best_roomB = new Room();
+        bool possible_connection_found = false;
+
+        foreach (Room roomA in all_rooms) {
+            possible_connection_found = false;
+            foreach (Room roomB in all_rooms) {
+
+                if (roomA == roomB) continue;
+                if (roomA.IsConnected(roomB)) {
+                    possible_connection_found = false;
+                    break;
+                }
+
+                for (int tile_indexA = 0; tile_indexA < roomA.edge_tiles.Count; ++tile_indexA) {
+                    for (int tile_indexB = 0; tile_indexB < roomB.edge_tiles.Count; ++tile_indexB) {
+                        Coord tileA = roomA.edge_tiles[tile_indexA];
+                        Coord tileB = roomB.edge_tiles[tile_indexB];
+                        int dist_between_rooms = (int)(Mathf.Pow(tileA.tileX - tileB.tileX, 2) + Mathf.Pow(tileA.tileY - tileB.tileY, 2));
+
+                        if (dist_between_rooms < best_dist || !possible_connection_found) {
+                            best_dist = dist_between_rooms;
+                            possible_connection_found = true;
+                            best_tileA = tileA;
+                            best_tileB = tileB;
+                            best_roomA = roomA;
+                            best_roomB = roomB;
+                        }
+                    }
+                }
+
+                if (possible_connection_found) {
+                    CreatePassage(best_roomA, best_roomB, best_tileA, best_tileB);
                 }
             }
         }
+    }
+
+    void CreatePassage (Room roomA, Room roomB, Coord tileA, Coord tileB) {
+        Room.ConnectRooms(roomA, roomB);
+        Debug.DrawLine(CoordToWorldPoint(tileA), CoordToWorldPoint(tileB), Color.green, 100f);
+    }
+
+    Vector3 CoordToWorldPoint(Coord tile) {
+        return new Vector3(-width / 2 + 0.5f + tile.tileX, 2, -height / 2 + 0.5f + tile.tileY);
     }
 
     List<List<Coord>> GetRegions(int tile_type){
@@ -190,16 +245,45 @@ public class MapGenerator : MonoBehaviour {
         }
     }
 
-    //private void OnDrawGizmos() {
-    //    if (map != null) {
-    //        for (int i = 0; i < width; ++i) {
-    //            for (int j = 0; j < height; ++j) {
-    //                Gizmos.color = (map[i, j] == 1) ? Color.black : Color.white;
-    //                Vector3 pos = new Vector2(-width / 2 + i + .5f, -height / 2 + j + .5f);
-    //                Gizmos.DrawCube(pos, Vector3.one);
-    //            }
-    //        }
-    //    }
-    //}
+    class Room {
+        public List<Coord> tiles;
+        public List<Coord> edge_tiles;
+        public List<Room> connected_rooms;
+        public int room_size;
+
+        public Room() { }
+        
+        public Room(List<Coord> room_tiles, int[,] map) {
+            tiles = room_tiles;
+            room_size = tiles.Count;
+            connected_rooms = new List<Room>();
+
+            edge_tiles = new List<Coord>();
+            foreach (Coord tile in tiles) {
+                for (int x = tile.tileX - 1; x <= tile.tileX + 1; ++x) {
+                    for (int y = tile.tileY - 1; y <= tile.tileY + 1; ++y) {
+                        if (x < map.GetLength(0) && y < map.GetLength(1)) {
+                            if (x == tile.tileX || y == tile.tileY) {
+                                if (map[x, y] == 1) {
+                                    edge_tiles.Add(tile);
+                                    break;
+                                }
+                            }
+                            
+                        } 
+                    }
+                }
+            }
+        }
+
+        public static void ConnectRooms(Room roomA, Room roomB) {
+            roomA.connected_rooms.Add(roomB);
+            roomB.connected_rooms.Add(roomA);
+        }
+
+        public bool IsConnected(Room other_room) {
+            return connected_rooms.Contains(other_room);
+        }
+    }
 
 }
